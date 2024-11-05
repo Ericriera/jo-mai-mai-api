@@ -9,9 +9,14 @@ router = APIRouter(prefix="/questions", tags=["questions"])
 
 
 @router.get("/", response_model=list)
-async def get_questions():
+async def get_questions(category: str = None):
+    filter_query = {}
+    if category:
+        filter_query["categories"] = {"$in": [category]}
+
     return questions_schema(
         db_client.questions.find(
+            filter=filter_query,
             projection={"created_at": False, "updated_at": False}
         )
     )
