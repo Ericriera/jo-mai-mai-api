@@ -3,28 +3,28 @@ from fastapi import APIRouter, HTTPException, status
 from db.models.question import Question
 from db.schemas.question import full_question_schema, questions_schema
 from db.client import db_client
-from bson import ObjectId
 
 router = APIRouter(prefix="/questions", tags=["questions"])
+questions = db_client.collection("questions")
 
 
 @router.get("/", response_model=list)
 async def get_questions(category: str = None):
-    filter_query = {}
     if category:
-        filter_query["categories"] = {"$in": [category]}
+        questions_ref = questions.where(
+            "categories", "array_contains", category
+        ).stream()
+    else:
+        questions_ref = questions.stream()
 
-    return questions_schema(
-        db_client.questions.find(
-            filter=filter_query,
-            projection={"created_at": False, "updated_at": False}
-        )
-    )
+    question_list = [{**q.to_dict(), "id": q.id} for q in questions_ref]
+
+    return questions_schema(question_list)
 
 
 @router.get("/{id}", response_model=Question)
 async def get_question(id: str):
-    return search_question("_id", ObjectId(id))
+    return search_question(id)
 
 
 @router.post("/", response_model=Question, status_code=status.HTTP_201_CREATED)
@@ -35,9 +35,8 @@ async def post_question(question: Question):
     question_dict["created_at"] = time
     question_dict["updated_at"] = time
 
-    id = db_client.questions.insert_one(question_dict).inserted_id
-
-    return search_question("_id", ObjectId(id))
+    _, question_ref = questions.add(question_dict)
+    return search_question(question_ref.id)
 
 
 @router.put("/", response_model=Question)
@@ -47,37 +46,45 @@ async def put_question(question: Question):
     time = datetime.now(timezone.utc).isoformat()
     question_dict["updated_at"] = time
 
-    updated = db_client.questions.find_one_and_replace(
-        {"_id": ObjectId(question.id)}, question_dict
-    )
+    question_ref = questions.document(question.id)
+    question = question_ref.get()
 
-    if not updated:
+    if not question.exists:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="The question does not exist",
         )
 
-    return search_question("_id", ObjectId(question.id))
+    question_ref.set(question_dict)
+
+    return search_question(question.id)
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_question(id: str):
-    found = db_client.questions.find_one_and_delete({"_id": ObjectId(id)})
+    question_ref = questions.document(id)
+    question = question_ref.get()
 
-    if not found:
+    if not question.exists:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="The question does not exist",
         )
 
+    question_ref.delete()
 
-def search_question(field: str, key):
-    question = db_client.questions.find_one({field: key})
 
-    if not question:
+def search_question(id: str):
+    question_ref = questions.document(id)
+    question = question_ref.get()
+
+    if not question.exists:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="The question does not exist",
         )
 
-    return Question(**full_question_schema(question))
+    question_data = question.to_dict()
+    question_data["id"] = question.id
+
+    return Question(**full_question_schema(question_data))

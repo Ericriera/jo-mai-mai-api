@@ -3,21 +3,23 @@ from fastapi import APIRouter, HTTPException, status
 from db.models.suggestion import Suggestion
 from db.schemas.suggestion import full_suggestion_schema, suggestions_schema
 from db.client import db_client
-from bson import ObjectId
 
 router = APIRouter(prefix="/suggestions", tags=["suggestions"])
+suggestions = db_client.collection("suggestions")
 
 
 @router.get("/", response_model=list)
 async def get_suggestions():
-    return suggestions_schema(
-        db_client.suggestions.find(projection={"created_at": False})
-    )
+    suggestions_ref = suggestions.stream()
+
+    suggestions_list = [{**s.to_dict(), "id": s.id} for s in suggestions_ref]
+
+    return suggestions_schema(suggestions_list)
 
 
 @router.get("/{id}", response_model=Suggestion)
 async def get_suggestion(id: str):
-    return search_suggestion("_id", ObjectId(id))
+    return search_suggestion(id)
 
 
 @router.post("/", response_model=Suggestion, status_code=status.HTTP_201_CREATED)
@@ -26,29 +28,36 @@ async def post_suggestion(suggestion: Suggestion):
     del suggestion_dict["id"]
     suggestion_dict["created_at"] = datetime.now(timezone.utc).isoformat()
 
-    id = db_client.suggestions.insert_one(suggestion_dict).inserted_id
+    _, suggestion_ref = suggestions.add(suggestion_dict)
 
-    return search_suggestion("_id", ObjectId(id))
+    return search_suggestion(suggestion_ref.id)
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_suggestion(id: str):
-    found = db_client.suggestions.find_one_and_delete({"_id": ObjectId(id)})
+    suggestion_ref = suggestions.document(id)
+    suggestion = suggestion_ref.get()
 
-    if not found:
+    if not suggestion.exists:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="The suggestion does not exist",
         )
 
+    suggestion_ref.delete()
 
-def search_suggestion(field: str, key):
-    suggestion = db_client.suggestions.find_one({field: key})
 
-    if not suggestion:
+def search_suggestion(id: str):
+    suggestion_ref = suggestions.document(id)
+    suggestion = suggestion_ref.get()
+
+    if not suggestion.exists:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="The suggestion does not exist",
         )
 
-    return Suggestion(**full_suggestion_schema(suggestion))
+    suggestion_data = suggestion.to_dict()
+    suggestion_data["id"] = suggestion.id
+
+    return Suggestion(**full_suggestion_schema(suggestion_data))

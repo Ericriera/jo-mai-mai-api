@@ -1,6 +1,6 @@
 def full_suggestion_schema(suggestion) -> dict:
     return {
-        "id": str(suggestion["_id"]),
+        "id": suggestion["id"],
         "suggestion": suggestion["suggestion"],
         "category": suggestion["category"],
         "created_at": suggestion["created_at"],
@@ -9,7 +9,7 @@ def full_suggestion_schema(suggestion) -> dict:
 
 def suggestion_schema(suggestion) -> dict:
     return {
-        "id": str(suggestion["_id"]),
+        "id": suggestion["id"],
         "suggestion": suggestion["suggestion"],
         "category": suggestion["category"],
     }

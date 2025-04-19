@@ -1,7 +1,3 @@
-import os
-from pymongo import MongoClient
+from google.cloud import firestore
 
-DB_URL = os.getenv("DB_URL")
-ENV = os.getenv("ENV")
-
-db_client = MongoClient(DB_URL)[ENV]
+db_client = firestore.Client.from_service_account_json("./serviceAccountKey.json")

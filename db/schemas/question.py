@@ -1,6 +1,6 @@
 def full_question_schema(question) -> dict:
     return {
-        "id": str(question["_id"]),
+        "id": question["id"],
         "question": question["question"],
         "categories": question["categories"],
         "created_at": question["created_at"],
@@ -10,7 +10,7 @@ def full_question_schema(question) -> dict:
 
 def question_schema(question) -> dict:
     return {
-        "id": str(question["_id"]),
+        "id": question["id"],
         "question": question["question"],
         "categories": question["categories"],
     }
